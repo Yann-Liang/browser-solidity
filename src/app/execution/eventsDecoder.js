@@ -3,6 +3,7 @@ var ethJSABI = require('ethereumjs-abi')
 
 /**
   * Register to txListener and extract events
+  * 向txListener注册并提取事件
   *
   */
 class EventsDecoder {

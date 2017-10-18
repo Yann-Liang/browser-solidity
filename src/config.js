@@ -1,3 +1,11 @@
+/*
+ * @Author: liangyanxiang 
+ * @Date: 2017-10-18 13:50:53 
+ * @Last Modified by: liangyanxiang
+ * @Last Modified time: 2017-10-18 13:53:15
+ * Config 配置編輯器的设置 左右下界面模块的边界 打开的文件 是否为自动编译
+ */
+
 'use strict'
 
 var CONFIG_FILE = '.remix.config'
