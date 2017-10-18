@@ -198,6 +198,7 @@ function run () {
     handleImports.import(url, (error, content) => {
       if (!error) {
         // FIXME: at some point we should invalidate the browser cache
+        //FIXME:在某个时候，我们应该使浏览器缓存失效
         filesProviders['browser'].addReadOnly(url, content)
         cb(null, content)
       } else {
