@@ -32,6 +32,7 @@ function Compiler (handleImportCall) {
   this.event.register('compilationFinished', (success, data, source) => {
     if (success && compilationStartTime) {
       this.event.trigger('compilationDuration', [(new Date().getTime()) - compilationStartTime])
+      // 获取到data之后调用ui/renderer api error()
     }
     compilationStartTime = null
   })
@@ -42,6 +43,7 @@ function Compiler (handleImportCall) {
 
   var internalCompile = function (files, target, missingInputs) {
     gatherImports(files, target, missingInputs, function (error, input) {
+      // input:{ 'sources': files, 'target': target }
       if (error) {
         self.lastCompilationResult = null
         self.event.trigger('compilationFinished', [false, { 'error': error }, files])
@@ -52,8 +54,13 @@ function Compiler (handleImportCall) {
   }
 
   var compile = function (files, target) {
+    console.info('编译触发2--定义')
     self.event.trigger('compilationStarted', [])
+    // compilationStarted --> compilationStartTime = new Date().getTime()
     internalCompile(files, target)
+    // gatherImports,
+    // compileJSON,通过window.Module的compile方法将结果返回给 compilationFinished()
+    // compilationFinished()-->触发 compilationFinished 事件
   }
   this.compile = compile
 
@@ -68,9 +75,9 @@ function Compiler (handleImportCall) {
   }
 
   function onInternalCompilerLoaded () {
+    // worker 初始值设了false，执行loadWorker赋值，此处没有执行
     if (worker === null) {
       var compiler = solc(window.Module)
-
       compilerAcceptsMultipleFiles = compiler.supportsMulti
 
       compileJSON = function (source, optimize, cb) {
@@ -82,11 +89,11 @@ function Compiler (handleImportCall) {
 
         var result
         try {
+          // optimize setting面板中的Enable Optimization  默认不勾选为false
           result = compiler.compile(source, optimize, missingInputsCallback)
         } catch (exception) {
           result = { error: 'Uncaught JavaScript exception:\n' + exception }
         }
-
         compilationFinished(result, missingInputs, source)
       }
       onCompilerLoaded(compiler.version())
@@ -124,7 +131,6 @@ function Compiler (handleImportCall) {
         }
       })
     }
-
     if (!noFatalErrors) {
       // There are fatal errors - abort here
       self.lastCompilationResult = null
@@ -144,13 +150,17 @@ function Compiler (handleImportCall) {
   }
 
   this.loadVersion = function (usingWorker, url) {
+    // 初始化函数 版本选择触发
     console.log('Loading ' + url + ' ' + (usingWorker ? 'with worker' : 'without worker'))
     self.event.trigger('loadingCompiler', [url, usingWorker])
-
     if (usingWorker) {
       loadWorker(url)
     } else {
       loadInternal(url)
+      // 插入script文件,url=https://ethereum.github.io/solc-bin/bin/soljson-v0.4.17+commit.bdeb9e52.js  内部封装了window.Module
+      // onInternalCompilerLoaded-->对compileJSON赋值，并执行 onCompilerLoaded (),
+      // onCompilerLoaded 对version赋值，并触发 compilerLoaded 事件
+      // compilerLoaded-->app.js,执行runCompiler()-->compiler.compile()
     }
   }
 
@@ -187,6 +197,7 @@ function Compiler (handleImportCall) {
       var data = msg.data
       switch (data.cmd) {
         case 'versionLoaded':
+          console.info('loadWorker')
           compilerAcceptsMultipleFiles = !!data.acceptsMultipleFiles
           onCompilerLoaded(data.data)
           break
@@ -221,6 +232,7 @@ function Compiler (handleImportCall) {
 
   function gatherImports (files, target, importHints, cb) {
     importHints = importHints || []
+    // compilerAcceptsMultipleFiles-->window.Module.cWrap'
     if (!compilerAcceptsMultipleFiles) {
       cb(null, files[target])
       return
@@ -230,7 +242,6 @@ function Compiler (handleImportCall) {
     //        It should tokenize by lines and check each.
     // eslint-disable-next-line no-useless-escape
     var importRegex = /^\s*import\s*[\'\"]([^\'\"]+)[\'\"];/g
-
     for (var fileName in files) {
       var match
       while ((match = importRegex.exec(files[fileName]))) {

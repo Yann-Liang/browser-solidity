@@ -549,6 +549,7 @@ function run () {
       if (runCompilation) runCompiler()
     },
     loadCompiler: (usingWorker, url) => {
+      // 编译触发  --settings-tab.js，usingWorker赋值详见settings-tab.js,谷歌运行为值false
       compiler.loadVersion(usingWorker, url)
     },
     runCompiler: () => {

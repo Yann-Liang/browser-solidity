@@ -178,6 +178,7 @@ function compileTab (container, appAPI, appEvents, opts) {
   `
 
   compileContainer.querySelector('#compile').addEventListener('click', () => {
+    // 手动触发编译 Start to compile
     appAPI.runCompiler()
   })
 
