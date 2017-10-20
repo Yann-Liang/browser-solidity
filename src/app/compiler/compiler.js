@@ -10,6 +10,7 @@ var EventManager = require('ethereum-remix').lib.EventManager
 
 /*
   trigger compilationFinished, compilerLoaded, compilationStarted, compilationDuration
+  触发编译完成、编译完成、开始编译、编译中...
 */
 function Compiler (handleImportCall) {
   var self = this
@@ -94,6 +95,7 @@ function Compiler (handleImportCall) {
         } catch (exception) {
           result = { error: 'Uncaught JavaScript exception:\n' + exception }
         }
+        console.log('编译结果：', result)
         compilationFinished(result, missingInputs, source)
       }
       onCompilerLoaded(compiler.version())

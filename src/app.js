@@ -198,7 +198,7 @@ function run () {
     handleImports.import(url, (error, content) => {
       if (!error) {
         // FIXME: at some point we should invalidate the browser cache
-        //FIXME:在某个时候，我们应该使浏览器缓存失效
+        // FIXME:在某个时候，我们应该使浏览器缓存失效
         filesProviders['browser'].addReadOnly(url, content)
         cb(null, content)
       } else {
@@ -365,6 +365,7 @@ function run () {
 
   // The event listener needs to be registered as early as possible, because the
   // parent will send the message upon the "load" event.
+  // 事件监听器需要尽早注册，因为父类将在“加载”事件中发送消息。
   var filesToLoad = null
   var loadFilesCallback = function (files) { filesToLoad = files } // will be replaced later
 
@@ -386,6 +387,7 @@ function run () {
   })
 
   // Add files received from remote instance (i.e. another browser-solidity)
+  // 添加来自远程实例的文件(即另一个浏览器- soli度)
   function loadFiles (filesSet) {
     for (var f in filesSet) {
       var name = helper.createNonClashingName(f, filesProviders['browser'])
@@ -399,11 +401,13 @@ function run () {
   }
 
   // Replace early callback with instant response
+  // 用即时响应代替早期回调
   loadFilesCallback = function (files) {
     loadFiles(files)
   }
 
   // Run if we did receive an event from remote instance while starting up
+  // 如果我们在启动时从远程实例接收事件，运行
   if (filesToLoad !== null) {
     loadFiles(filesToLoad)
   }
@@ -428,6 +432,7 @@ function run () {
   })
 
   // insert ballot contract if there are no files available
+  // 如果没有可用的文件，请插入投票合约
   if (!loadingFromGist && Object.keys(filesProviders['browser'].list()).length === 0) {
     if (!filesProviders['browser'].set(examples.ballot.name, examples.ballot.content)) {
       modalDialogCustom.alert('Failed to store example contract in browser. Remix will not work properly. Please ensure Remix has access to LocalStorage. Safari in Private mode is known not to work.')
@@ -655,6 +660,7 @@ function run () {
   function runCompiler () {
     if (transactionDebugger.isActive) return
 
+    // 获取当前文件
     fileManager.saveCurrentFile()
     var currentFile = config.get('currentFile')
     if (currentFile) {
@@ -667,6 +673,7 @@ function run () {
             console.log(error)
           } else {
             sources[target] = content
+            // 运行编译
             compiler.compile(sources, target)
           }
         })
@@ -704,6 +711,7 @@ function run () {
 
   editor.event.register('contentChanged', editorOnChange)
   // in order to save the file when switching
+  // 为了在切换时保存文件
   editor.event.register('sessionSwitched', editorOnChange)
 
   executionContext.event.register('contextChanged', this, function (context) {

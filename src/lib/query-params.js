@@ -1,6 +1,7 @@
 'use strict'
 
 // Allowing window to be overriden for testing
+// 允许窗口进行测试，以便进行测试
 function QueryParams (_window) {
   if (_window === undefined) _window = window
 

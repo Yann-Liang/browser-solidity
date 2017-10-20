@@ -89,6 +89,7 @@ function SettingsTab (container, appAPI, appEvents, opts) {
   versionSelector.setAttribute('disabled', true)
 
   // load the new version upon change
+  // 在变更时加载新版本
   versionSelector.addEventListener('change', function () {
     loadVersion(versionSelector.value, queryParams, appAPI, el)
   })

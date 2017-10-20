@@ -1,3 +1,12 @@
+/*
+ * @Author: liangyanxiang
+ * @Date: 2017-10-19 16:34:44
+ * @Last Modified by: liangyanxiang
+ * @Last Modified time: 2017-10-19 16:36:05
+ * 编辑区顶部的提示
+ * 用于提示代码当前上下文
+ */
+
 'use strict'
 var yo = require('yo-yo')
 var csjs = require('csjs-inject')
@@ -129,8 +138,8 @@ class ContextView {
       }
     }
 
-    return yo`<div class=${css.line}>
-      <div title=${type} class=${css.type} >${type}</div>
+    return yo`<div class=${css.line}>范德萨发撒旦法三分
+      <div title=${type} class=${css.type} >发呆是生生世世生生世世生生世世生生世世生生世世${type}</div>
       <div title=${node.attributes.name} class=${css.name} >${node.attributes.name}</div>
       <i title='Go to Definition' class="fa fa-share ${css.jumpto}" aria-hidden="true" onclick=${jumpTo}></i>
       <span class=${css.referencesnb}>${references}</span>
