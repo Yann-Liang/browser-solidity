@@ -4,9 +4,13 @@ var solc = require('solc/wrapper')
 var solcABI = require('solc/abi')
 
 var webworkify = require('webworkify')
-var utils = require('../../lib/utils')
 
-var EventManager = require('ethereum-remix').lib.EventManager
+var compilerInput = require('./compiler-input')
+
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
+
+var txHelper = require('../execution/txHelper')
 
 /*
   trigger compilationFinished, compilerLoaded, compilationStarted, compilationDuration
@@ -17,7 +21,6 @@ function Compiler (handleImportCall) {
   this.event = new EventManager()
 
   var compileJSON
-  var compilerAcceptsMultipleFiles
 
   var worker = null
 
@@ -47,7 +50,7 @@ function Compiler (handleImportCall) {
       // input:{ 'sources': files, 'target': target }
       if (error) {
         self.lastCompilationResult = null
-        self.event.trigger('compilationFinished', [false, { 'error': error }, files])
+        self.event.trigger('compilationFinished', [false, {'error': { formattedMessage: error, severity: 'error' }}, files])
       } else {
         compileJSON(input, optimize ? 1 : 0)
       }
@@ -79,7 +82,6 @@ function Compiler (handleImportCall) {
     // worker 初始值设了false，执行loadWorker赋值，此处没有执行
     if (worker === null) {
       var compiler = solc(window.Module)
-      compilerAcceptsMultipleFiles = compiler.supportsMulti
 
       compileJSON = function (source, optimize, cb) {
         var missingInputs = []
@@ -89,9 +91,10 @@ function Compiler (handleImportCall) {
         }
 
         var result
-        try {
-          // optimize setting面板中的Enable Optimization  默认不勾选为false
-          result = compiler.compile(source, optimize, missingInputsCallback)
+        try {// optimize setting面板中的Enable Optimization  默认不勾选为false
+          var input = compilerInput(source.sources, {optimize: optimize, target: source.target})
+          result = compiler.compileStandardWrapper(input, missingInputsCallback)
+          result = JSON.parse(result)
         } catch (exception) {
           result = { error: 'Uncaught JavaScript exception:\n' + exception }
         }
@@ -106,17 +109,86 @@ function Compiler (handleImportCall) {
     data: null,
     source: null
   }
+
+  /**
+    * return the contract obj of the given @arg name. Uses last compilation result.
+    * return null if not found
+    * @param {String} name    - contract name
+    * @returns contract obj and associated file: { contract, file } or null
+    */
+  this.getContract = (name) => {
+    if (this.lastCompilationResult.data && this.lastCompilationResult.data.contracts) {
+      return txHelper.getContract(name, this.lastCompilationResult.data.contracts)
+    }
+    return null
+  }
+
+  /**
+    * call the given @arg cb (function) for all the contracts. Uses last compilation result
+    * @param {Function} cb    - callback
+    */
+  this.visitContracts = (cb) => {
+    if (this.lastCompilationResult.data && this.lastCompilationResult.data.contracts) {
+      return txHelper.visitContracts(this.lastCompilationResult.data.contracts, cb)
+    }
+    return null
+  }
+
+  /**
+    * return the compiled contracts from the last compilation result
+    * @return {Object}     - contracts
+    */
+  this.getContracts = () => {
+    if (this.lastCompilationResult.data && this.lastCompilationResult.data.contracts) {
+      return this.lastCompilationResult.data.contracts
+    }
+    return null
+  }
+
+   /**
+    * return the sources from the last compilation result
+    * @param {Object} cb    - map of sources
+    */
+  this.getSources = () => {
+    if (this.lastCompilationResult.source) {
+      return this.lastCompilationResult.source.sources
+    }
+    return null
+  }
+
+  /**
+    * return the sources @arg fileName from the last compilation result
+    * @param {Object} cb    - map of sources
+    */
+  this.getSource = (fileName) => {
+    if (this.lastCompilationResult.source) {
+      return this.lastCompilationResult.source.sources[fileName]
+    }
+    return null
+  }
+
+  /**
+    * return the source from the last compilation result that has the given index. null if source not found
+    * @param {Int} index    - index of the source
+    */
+  this.getSourceName = (index) => {
+    if (this.lastCompilationResult.data && this.lastCompilationResult.data.sources) {
+      return Object.keys(this.lastCompilationResult.data.sources)[index]
+    }
+    return null
+  }
+
   function compilationFinished (data, missingInputs, source) {
     var noFatalErrors = true // ie warnings are ok
 
     function isValidError (error) {
       // The deferred import is not a real error
       // FIXME: maybe have a better check?
-      if (/Deferred import/.exec(error)) {
+      if (/Deferred import/.exec(error.message)) {
         return false
       }
 
-      return utils.errortype(error) !== 'warning'
+      return error.severity !== 'warning'
     }
 
     if (data['error'] !== undefined) {
@@ -199,8 +271,6 @@ function Compiler (handleImportCall) {
       var data = msg.data
       switch (data.cmd) {
         case 'versionLoaded':
-          console.info('loadWorker')
-          compilerAcceptsMultipleFiles = !!data.acceptsMultipleFiles
           onCompilerLoaded(data.data)
           break
         case 'compiled':
@@ -227,18 +297,13 @@ function Compiler (handleImportCall) {
     })
     compileJSON = function (source, optimize) {
       jobs.push({sources: source})
-      worker.postMessage({cmd: 'compile', job: jobs.length - 1, source: JSON.stringify(source), optimize: optimize})
+      worker.postMessage({cmd: 'compile', job: jobs.length - 1, input: compilerInput(source.sources, {optimize: optimize, target: source.target})})
     }
     worker.postMessage({cmd: 'loadVersion', data: url})
   }
 
   function gatherImports (files, target, importHints, cb) {
     importHints = importHints || []
-    // compilerAcceptsMultipleFiles-->window.Module.cWrap'
-    if (!compilerAcceptsMultipleFiles) {
-      cb(null, files[target])
-      return
-    }
 
     // FIXME: This will only match imports if the file begins with one.
     //        It should tokenize by lines and check each.
@@ -246,7 +311,7 @@ function Compiler (handleImportCall) {
     var importRegex = /^\s*import\s*[\'\"]([^\'\"]+)[\'\"];/g
     for (var fileName in files) {
       var match
-      while ((match = importRegex.exec(files[fileName]))) {
+      while ((match = importRegex.exec(files[fileName].content))) {
         var importFilePath = match[1]
         if (importFilePath.startsWith('./')) {
           var path = /(.*\/).*/.exec(target)
@@ -274,7 +339,7 @@ function Compiler (handleImportCall) {
         if (err) {
           cb(err)
         } else {
-          files[m] = content
+          files[m] = { content }
           gatherImports(files, target, importHints, cb)
         }
       })
@@ -294,12 +359,9 @@ function Compiler (handleImportCall) {
   }
 
   function updateInterface (data) {
-    for (var contract in data.contracts) {
-      var abi = JSON.parse(data.contracts[contract].interface)
-      abi = solcABI.update(truncateVersion(currentVersion), abi)
-      data.contracts[contract].interface = JSON.stringify(abi)
-    }
-
+    txHelper.visitContracts(data.contracts, (contract) => {
+      data.contracts[contract.file][contract.name].abi = solcABI.update(truncateVersion(currentVersion), contract.object.abi)
+    })
     return data
   }
 }

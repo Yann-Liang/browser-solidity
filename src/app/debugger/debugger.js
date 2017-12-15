@@ -1,6 +1,8 @@
 'use strict'
 
-var remix = require('ethereum-remix')
+var remixDebugger = require('remix-debugger')
+var remixLib = require('remix-lib')
+var remixCore = require('remix-core')
 var executionContext = require('../../execution-context')
 
 /**
@@ -8,13 +10,13 @@ var executionContext = require('../../execution-context')
  */
 function Debugger (id, appAPI, editorEvent) {
   this.el = document.querySelector(id)
-  this.debugger = new remix.ui.Debugger()
-  this.sourceMappingDecoder = new remix.util.SourceMappingDecoder()
+  this.debugger = new remixDebugger.ui.Debugger()
+  this.sourceMappingDecoder = new remixLib.SourceMappingDecoder()
   this.el.appendChild(this.debugger.render())
   this.appAPI = appAPI
   this.isActive = false
 
-  this.breakPointManager = new remix.code.BreakpointManager(this.debugger, (sourceLocation) => {
+  this.breakPointManager = new remixCore.code.BreakpointManager(this.debugger, (sourceLocation) => {
     return appAPI.offsetToLineColumn(sourceLocation, sourceLocation.file, this.editor, this.appAPI.lastCompilationResult().data)
   })
 
@@ -73,7 +75,10 @@ Debugger.prototype.debug = function (txHash) {
   var self = this
   this.debugger.web3().eth.getTransaction(txHash, function (error, tx) {
     if (!error) {
-      self.debugger.setCompilationResult(self.appAPI.lastCompilationResult().data)
+      var compilationResult = self.appAPI.lastCompilationResult()
+      if (compilationResult) {
+        self.debugger.setCompilationResult(compilationResult.data)
+      }
       self.debugger.debug(tx)
     }
   })

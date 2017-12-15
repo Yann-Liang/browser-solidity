@@ -3,7 +3,8 @@ var $ = require('jquery')
 var csjs = require('csjs-inject')
 var yo = require('yo-yo')
 var minixhr = require('minixhr')  // simple and small cross-browser XMLHttpRequest (XHR)
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 var FileExplorer = require('../files/file-explorer')
 var modalDialog = require('../ui/modaldialog')
 var modalDialogCustom = require('../ui/modal-dialog-custom')
@@ -11,8 +12,7 @@ var QueryParams = require('../../lib/query-params')
 var queryParams = new QueryParams()
 var helper = require('../../lib/helper')
 
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 module.exports = filepanel
@@ -32,9 +32,11 @@ var css = csjs`
     width             : 100%;
   }
   .menu               {
-    height            : 2em;
-    margin-top        : 0.5em;
+    margin-top        : -0.2em;
     flex-shrink       : 0;
+    display           : flex;
+    flex-direction    : row;
+    min-width         : 160px;
   }
   .newFile            {
     padding           : 10px;
@@ -126,6 +128,10 @@ function filepanel (appAPI, filesProvider) {
   var self = this
   var fileExplorer = new FileExplorer(appAPI, filesProvider['browser'])
   var fileSystemExplorer = new FileExplorer(appAPI, filesProvider['localhost'])
+  var swarmExplorer = new FileExplorer(appAPI, filesProvider['swarm'])
+  var githubExplorer = new FileExplorer(appAPI, filesProvider['github'])
+  var gistExplorer = new FileExplorer(appAPI, filesProvider['gist'])
+
   var dragbar = yo`<div onmousedown=${mousedown} class=${css.dragbar}></div>`
 
   function remixdDialog () {
@@ -172,6 +178,9 @@ function filepanel (appAPI, filesProvider) {
           <div class=${css.treeviews}>
             <div class=${css.treeview}>${fileExplorer.init()}</div>
             <div class="filesystemexplorer ${css.treeview}"></div>
+            <div class="swarmexplorer ${css.treeview}">${swarmExplorer.init()}</div>
+            <div class="githubexplorer ${css.treeview}">${githubExplorer.init()}</div>
+            <div class="gistexplorer ${css.treeview}">${gistExplorer.init()}</div>
           </div>
         </div>
         ${dragbar}
@@ -216,6 +225,18 @@ function filepanel (appAPI, filesProvider) {
   })
 
   fileSystemExplorer.events.register('focus', function (path) {
+    appAPI.switchFile(path)
+  })
+
+  swarmExplorer.events.register('focus', function (path) {
+    appAPI.switchFile(path)
+  })
+
+  githubExplorer.events.register('focus', function (path) {
+    appAPI.switchFile(path)
+  })
+
+  gistExplorer.events.register('focus', function (path) {
     appAPI.switchFile(path)
   })
 

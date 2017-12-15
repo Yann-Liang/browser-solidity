@@ -1,8 +1,9 @@
 'use strict'
 
 var $ = require('jquery')
-var remix = require('ethereum-remix')
-var EventManager = remix.lib.EventManager
+var remixLib = require('remix-lib')
+var yo = require('yo-yo')
+var EventManager = remixLib.EventManager
 
 /*
   attach to files event (removed renamed)
@@ -78,6 +79,13 @@ class FileManager {
     this.refreshTabs()
   }
 
+  currentPath () {
+    var currentFile = this.opt.config.get('currentFile')
+    var reg = /(.*\/).*/
+    var path = reg.exec(currentFile)
+    return path ? path[1] : null
+  }
+
   fileRemovedEvent (path) {
     if (path === this.opt.config.get('currentFile')) {
       this.opt.config.set('currentFile', '')
@@ -99,7 +107,7 @@ class FileManager {
     $filesEl.find('.file').remove()
 
     for (var file in this.tabbedFiles) {
-      $filesEl.append($('<li class="file"><span class="name">' + file + '</span><span class="remove"><i class="fa fa-close"></i></span></li>'))
+      $filesEl.append(yo`<li class="file"><span class="name">${file}</span><span class="remove"><i class="fa fa-close"></i></span></li>`)
     }
     var currentFileOpen = !!this.opt.config.get('currentFile')
 

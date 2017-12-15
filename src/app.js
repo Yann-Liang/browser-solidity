@@ -3,8 +3,8 @@
 var $ = require('jquery')
 var csjs = require('csjs-inject')
 var yo = require('yo-yo')
-var remix = require('ethereum-remix')
-var EventManager = remix.lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 
 var UniversalDApp = require('./universal-dapp.js')
 var Remixd = require('./lib/remixd')
@@ -36,8 +36,9 @@ var handleImports = require('./app/compiler/compiler-imports')
 var FileManager = require('./app/files/fileManager')
 var ContextualListener = require('./app/editor/contextualListener')
 var ContextView = require('./app/editor/contextView')
+var BasicReadOnlyExplorer = require('./app/files/basicReadOnlyExplorer')
 
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -108,9 +109,14 @@ class App {
     self._api = {}
     var fileStorage = new Storage('sol:')
     self._api.config = new Config(fileStorage)
+    executionContext.init(self._api.config)
     self._api.filesProviders = {}
     self._api.filesProviders['browser'] = new Browserfiles(fileStorage)
     self._api.filesProviders['localhost'] = new SharedFolder(new Remixd())
+    self._api.filesProviders['swarm'] = new BasicReadOnlyExplorer('swarm')
+    self._api.filesProviders['github'] = new BasicReadOnlyExplorer('github')
+    self._api.filesProviders['gist'] = new BasicReadOnlyExplorer('gist')
+    self._api.filesProviders['ipfs'] = new BasicReadOnlyExplorer('ipfs')
     self._view = {}
     self._components = {}
     self.data = {
@@ -195,11 +201,11 @@ function run () {
     if (provider && provider.exists(url)) {
       return provider.get(url, cb)
     }
-    handleImports.import(url, (error, content) => {
+    handleImports.import(url, (error, content, cleanUrl, type) => {
       if (!error) {
         // FIXME: at some point we should invalidate the browser cache
         // FIXME:在某个时候，我们应该使浏览器缓存失效
-        filesProviders['browser'].addReadOnly(url, content)
+        filesProviders[type].addReadOnly(cleanUrl, content)
         cb(null, content)
       } else {
         cb(error)
@@ -215,8 +221,21 @@ function run () {
     },
     getValue: (cb) => {
       try {
-        var comp = $('#value').val().split(' ')
-        cb(null, executionContext.web3().toWei(comp[0], comp.slice(1).join(' ')))
+        var number = document.querySelector('#value').value
+        var select = document.getElementById('unit')
+        var index = select.selectedIndex
+        var selectedUnit = select.querySelectorAll('option')[index].dataset.unit
+        var unit = 'ether' // default
+        if (selectedUnit === 'ether') {
+          unit = 'ether'
+        } else if (selectedUnit === 'finney') {
+          unit = 'finney'
+        } else if (selectedUnit === 'gwei') {
+          unit = 'gwei'
+        } else if (selectedUnit === 'wei') {
+          unit = 'wei'
+        }
+        cb(null, executionContext.web3().toWei(number, unit))
       } catch (e) {
         cb(e)
       }
@@ -298,13 +317,16 @@ function run () {
     getCurrentFile: () => {
       return config.get('currentFile')
     },
+    getSourceName: (index) => {
+      return compiler.getSourceName(index)
+    },
     highlight: (position, node) => {
       if (compiler.lastCompilationResult && compiler.lastCompilationResult.data) {
         var lineColumn = offsetToLineColumnConverter.offsetToLineColumn(position, position.file, compiler.lastCompilationResult)
         var css = 'highlightreference'
         if (node.children && node.children.length) {
           // If node has children, highlight the entire line. if not, just highlight the current source position of the node.
-          css = 'highlightreferenceline'
+          css = 'highlightreference'
           lineColumn = {
             start: {
               line: lineColumn.start.line,
@@ -316,7 +338,10 @@ function run () {
             }
           }
         }
-        return editor.addMarker(lineColumn, compiler.lastCompilationResult.data.sourceList[position.file], css)
+        var fileName = compiler.getSourceName(position.file)
+        if (fileName) {
+          return editor.addMarker(lineColumn, fileName, css)
+        }
       }
       return null
     },
@@ -334,12 +359,12 @@ function run () {
     jumpTo: (position) => {
       if (compiler.lastCompilationResult && compiler.lastCompilationResult.data) {
         var lineColumn = offsetToLineColumnConverter.offsetToLineColumn(position, position.file, compiler.lastCompilationResult)
-        var filename = compiler.lastCompilationResult.data.sourceList[position.file]
+        var filename = compiler.getSourceName(position.file)
         if (filename !== config.get('currentFile') && (filesProviders['browser'].exists(filename) || filesProviders['localhost'].exists(filename))) {
           fileManager.switchFile(filename)
         }
         if (lineColumn.start && lineColumn.start.line && lineColumn.start.column) {
-          editor.gotoLine(lineColumn.start.line, lineColumn.start.column + 1)
+          editor.gotoLine(lineColumn.start.line, lineColumn.end.column + 1)
         }
       }
     }
@@ -387,15 +412,16 @@ function run () {
   })
 
   // Add files received from remote instance (i.e. another browser-solidity)
-  // 添加来自远程实例的文件(即另一个浏览器- soli度)
-  function loadFiles (filesSet) {
+  function loadFiles (filesSet, fileProvider) {
+    if (!fileProvider) fileProvider = 'browser'
+
     for (var f in filesSet) {
-      var name = helper.createNonClashingName(f, filesProviders['browser'])
+      var name = helper.createNonClashingName(f, filesProviders[fileProvider])
       if (helper.checkSpecialChars(name)) {
         modalDialogCustom.alert('Special characters are not allowed')
         return
       }
-      filesProviders['browser'].set(name, filesSet[f].content)
+      filesProviders[fileProvider].set(name, filesSet[f].content)
     }
     fileManager.switchFile()
   }
@@ -425,7 +451,7 @@ function run () {
             modalDialogCustom.alert('Gist load error: ' + response.data.message)
             return
           }
-          loadFiles(response.data.files)
+          loadFiles(response.data.files, 'gist')
         }
       }
     })
@@ -517,17 +543,42 @@ function run () {
       document.querySelector(`.${css.dragbar2}`).style.right = delta + 'px'
       onResize()
     },
+    getAccounts: (cb) => {
+      udapp.getAccounts(cb)
+    },
+    getSource: (fileName) => {
+      return compiler.getSource(fileName)
+    },
+    editorContent: () => {
+      return editor.get(editor.current())
+    },
+    currentFile: () => {
+      return config.get('currentFile')
+    },
     getContracts: () => {
-      if (compiler.lastCompilationResult && compiler.lastCompilationResult.data) {
-        return compiler.lastCompilationResult.data.contracts
-      }
-      return null
+      return compiler.getContracts()
+    },
+    getContract: (name) => {
+      return compiler.getContract(name)
+    },
+    visitContracts: (cb) => {
+      compiler.visitContracts(cb)
     },
     udapp: () => {
       return udapp
     },
+    switchFile: function (path) {
+      fileManager.switchFile(path)
+    },
+    filesProviders: filesProviders,
     fileProviderOf: (path) => {
       return fileManager.fileProviderOf(path)
+    },
+    fileProvider: (name) => {
+      return self._api.filesProviders[name]
+    },
+    currentPath: function () {
+      return fileManager.currentPath()
     },
     getBalance: (address, callback) => {
       udapp.getBalance(address, (error, balance) => {
@@ -602,7 +653,7 @@ function run () {
       this.fullLineMarker = null
       this.source = null
       if (lineColumnPos) {
-        this.source = compiler.lastCompilationResult.data.sourceList[location.file] // auto switch to that tab
+        this.source = compiler.getSourceName(location.file)
         if (config.get('currentFile') !== this.source) {
           fileManager.switchFile(this.source)
         }
@@ -662,23 +713,26 @@ function run () {
 
     // 获取当前文件
     fileManager.saveCurrentFile()
+    editor.clearAnnotations()
     var currentFile = config.get('currentFile')
     if (currentFile) {
-      var target = currentFile
-      var sources = {}
-      var provider = fileManager.fileProviderOf(currentFile)
-      if (provider) {
-        provider.get(target, (error, content) => {
-          if (error) {
-            console.log(error)
-          } else {
-            sources[target] = content
-            // 运行编译
-            compiler.compile(sources, target)
-          }
-        })
-      } else {
-        console.log('cannot compile ' + currentFile + '. Does not belong to any explorer')
+      if (/.(.sol)$/.exec(currentFile)) {
+        // only compile *.sol file.
+        var target = currentFile
+        var sources = {}
+        var provider = fileManager.fileProviderOf(currentFile)
+        if (provider) {
+          provider.get(target, (error, content) => {
+            if (error) {
+              console.log(error)
+            } else {
+              sources[target] = { content }
+              compiler.compile(sources, target)
+            }
+          })
+        } else {
+          console.log('cannot compile ' + currentFile + '. Does not belong to any explorer')
+        }
       }
     }
   }
@@ -733,10 +787,6 @@ function run () {
     if (queryParams.get().debugtx) {
       startdebugging(queryParams.get().debugtx)
     }
-  })
-
-  compiler.event.register('compilationStarted', this, function () {
-    editor.clearAnnotations()
   })
 
   function startdebugging (txHash) {

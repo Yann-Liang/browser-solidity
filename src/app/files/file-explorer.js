@@ -1,16 +1,15 @@
 /* global FileReader */
 var yo = require('yo-yo')
 var csjs = require('csjs-inject')
-var Treeview = require('ethereum-remix').ui.TreeView
+var Treeview = require('remix-debugger').ui.TreeView
 var modalDialog = require('../ui/modaldialog')
 var modalDialogCustom = require('../ui/modal-dialog-custom')
-
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 
 var helper = require('../../lib/helper')
 
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -24,6 +23,9 @@ var css = csjs`
   .file               {
     font-size         : 14px;
     cursor            : pointer;
+  }
+  .file               {
+    color             : ${styles.leftPanel.text_Teriary};
   }
   .hasFocus           {
     background-color  : ${styles.leftPanel.backgroundColor_FileExplorer};
@@ -217,6 +219,7 @@ function fileExplorer (appAPI, files) {
   }
 
   function editModeOn (event) {
+    if (self.files.readonly) return
     var label = this
     var li = getLiFrom(label)
     var classes = li.className
@@ -411,9 +414,6 @@ function expandPathTo (li) {
 
 fileExplorer.prototype.init = function () {
   var files = this.files.listAsTree()
-  if (!Object.keys(files).length) {
-    files[this.files.type] = {} // default
-  }
   var element = this.treeView.render(files)
   element.className = css.fileexplorer
   element.events = this.events

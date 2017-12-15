@@ -4,9 +4,9 @@
 var $ = require('jquery')
 var ethJSUtil = require('ethereumjs-util')
 var BN = ethJSUtil.BN
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 var crypto = require('crypto')
-var async = require('async')
 var TxRunner = require('./app/execution/txRunner')
 var yo = require('yo-yo')
 var txFormat = require('./app/execution/txFormat')
@@ -14,15 +14,12 @@ var txHelper = require('./app/execution/txHelper')
 var txExecution = require('./app/execution/txExecution')
 var helper = require('./lib/helper')
 var executionContext = require('./execution-context')
-
-// copy to copyToClipboard
-const copy = require('clipboard-copy')
+var copyToClipboard = require('./app/ui/copy-to-clipboard')
 
 // -------------- styling ----------------------
 var csjs = require('csjs-inject')
 
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -31,26 +28,35 @@ var css = csjs`
     align-items: center;
   }
   .title {
-    ${styles.rightPanel.runTab.dropdown_RunTab}
+    ${styles.rightPanel.runTab.titlebox_RunTab}
     display: flex;
-    justify-content: space-between;
+    justify-content: end;
     align-items: center;
     font-size: 11px;
-    width: 75%;
-    min-width: 500px;
+    height: 30px;
+    width: 97%;
     overflow: hidden;
     word-break: break-word;
     line-height: initial;
+    overflow: visible;
+  }
+  .titleLine {
+    display: flex;
+    align-items: baseline;
   }
   .titleText {
     margin-right: 1em;
     word-break: break-word;
     min-width: 230px;
   }
+
+  .title .copy {
+    color: ${styles.rightPanel.runTab.icon_AltColor_Instance_CopyToClipboard};
+  }
   .instance {
-    ${styles.rightPanel.runTab.box_Instance}
-    margin-bottom: 2px;
-    padding: 10px 15px 6px 15px;
+    ${styles.rightPanel.runTab.box_Instance};
+    margin-bottom: 10px;
+    padding: 10px 15px 15px 15px;
   }
   .instance .title:before {
     content: "\\25BE";
@@ -66,13 +72,8 @@ var css = csjs`
   .instance.hidesub .title {
       display: flex;
   }
-  .copy  {
-    cursor: pointer;
-    margin-left: 3%;
-    color: ${styles.rightPanel.runTab.icon_Color_Instance_CopyToClipboard};
-  }
-  .copy:hover{
-    color: ${styles.rightPanel.runTab.icon_HoverColor_Instance_CopyToClipboard};
+  .instance.hidesub .udappClose {
+      display: flex;
   }
   .buttonsContainer {
     margin-top: 2%;
@@ -84,14 +85,12 @@ var css = csjs`
   }
   .instanceButton {}
   .closeIcon {
-    font-size: 10px;
-    position: relative;
-    top: -5px;
-    right: -2px;
+    font-size: 12px;
+    cursor: pointer;
   }
   .udappClose {
-    margin-left: 3%;
-    align-self: center;
+    display: flex;
+    justify-content: flex-end;
   }
   .contractProperty {
     overflow: auto;
@@ -102,35 +101,27 @@ var css = csjs`
     padding: .36em;
   }
   .contractProperty button {
-    border-radius           : 3px;
-    border                  : .3px solid #dddddd;
-    cursor                  : pointer;
-    min-height              : 25px;
-    max-height              : 25px;
-    padding                 : 3px;
-    min-width               : 100px;
-    width                   : 25%;
-    font-size               : 10px;
+    ${styles.rightPanel.runTab.button_Create}
+    min-width: 100px;
+    width: 100px;
+    font-size: 10px;
+    margin:0;
+    word-break: inherit;
   }
   .contractProperty button:disabled {
     cursor: not-allowed;
     background-color: white;
     border-color: lightgray;
   }
-  .call {
-    background-color: ${styles.colors.lightRed};
-    border-color: ${styles.colors.lightRed};
-  }
-  .constant .call {
-    background-color: ${styles.colors.lightBlue};
-    border-color: ${styles.colors.lightBlue};
-    width: 25%;
+  .contractProperty.constant button {
+    ${styles.rightPanel.runTab.button_Constant}
+    min-width: 100px;
+    width: 100px;
+    font-size: 10px;
+    margin:0;
+    word-break: inherit;
     outline: none;
-  }
-  .payable .call {
-    background-color: ${styles.colors.red};
-    border-color: ${styles.colors.red};
-    width: 25%;
+    width: inherit;
   }
   .contractProperty input {
     display: none;
@@ -139,7 +130,8 @@ var css = csjs`
     box-sizing: border-box;
     float: left;
     align-self: center;
-    color: ${styles.colors.grey};
+    color: ${styles.appProperties.mainText_Color};
+    margin-left: 4px;
   }
   .hasArgs input {
     display: block;
@@ -175,7 +167,6 @@ function UniversalDApp (opts = {}) {
     self.reset(self.contracts)
   })
   self.txRunner = new TxRunner({}, {
-    queueTxs: true,
     personalMode: this.personalMode
   })
 }
@@ -196,7 +187,6 @@ UniversalDApp.prototype.reset = function (contracts, transactionContextAPI) {
     executionContext.vm().stateManager.cache.flush(function () {})
   }
   this.txRunner = new TxRunner(this.accounts, {
-    queueTxs: true,
     personalMode: this.personalMode
   })
 }
@@ -282,6 +272,11 @@ UniversalDApp.prototype.getBalance = function (address, cb) {
   }
 }
 
+UniversalDApp.prototype.renderInstance = function (contract, address, contractName) {
+  var abi = txHelper.sortAbiFunction(contract.abi)
+  return this.renderInstanceFromABI(abi, address, contractName)
+}
+
 // TODO this function was named before "appendChild".
 // this will render an instance: contract name, contract address, and all the public functions
 // basically this has to be called for the "atAddress" (line 393) and when a contract creation succeed
@@ -290,22 +285,24 @@ UniversalDApp.prototype.getBalance = function (address, cb) {
 // 这将呈现一个实例:合同名称、合同地址以及所有的公共职能
 // 基本上这需要“atAddress”(第393行)和合同创建成功
 // 这返回一个DOM元素
-UniversalDApp.prototype.renderInstance = function (contract, address, contractName) {
+UniversalDApp.prototype.renderInstanceFromABI = function (contractABI, address, contractName) {
   var self = this
-  debugger;
-  function remove () { $instance.remove() }
-  var $instance = $(`<div class="instance ${css.instance}"/>`)
-  var context = executionContext.isVM() ? 'memory' : 'blockchain'
+
+  function remove () { instance.remove() }
 
   address = (address.slice(0, 2) === '0x' ? '' : '0x') + address.toString('hex')
+  var instance = yo`<div class="instance ${css.instance}" id="instance${address}"></div>`
+  var context = executionContext.isVM() ? 'memory' : 'blockchain'
+
   var shortAddress = helper.shortenAddress(address)
   var title = yo`<div class="${css.title}" onclick=${toggleClass}>
     <div class="${css.titleText}"> ${contractName} at ${shortAddress} (${context}) </div>
-    <i class="fa fa-clipboard ${css.copy}" aria-hidden="true" onclick=${copyToClipboard} title='Copy to clipboard'></i>
+    ${copyToClipboard(() => address)}
   </div>`
+
   if (self.removable_instances) {
     var close = yo`<div class="${css.udappClose}" onclick=${remove}><i class="${css.closeIcon} fa fa-close" aria-hidden="true"></i></div>`
-    title.appendChild(close)
+    instance.append(close)
   }
 
   function toggleClass () {
@@ -316,37 +313,36 @@ UniversalDApp.prototype.renderInstance = function (contract, address, contractNa
     debugger;
     event.stopPropagation()
     copy(address)
+    $(instance).toggleClass(`${css.hidesub}`)
   }
 
-  var abi = txHelper.sortAbiFunction(contract)
-
-  $instance.get(0).appendChild(title)
+  instance.appendChild(title)
 
   // Add the fallback function
-  var fallback = txHelper.getFallbackInterface(abi)
+  var fallback = txHelper.getFallbackInterface(contractABI)
   if (fallback) {
-    $instance.append(this.getCallButton({
+    instance.appendChild(this.getCallButton({
       funABI: fallback,
       address: address,
-      contractAbi: abi,
+      contractAbi: contractABI,
       contractName: contractName
     }))
   }
 
-  $.each(abi, (i, funABI) => {
+  $.each(contractABI, (i, funABI) => {
     if (funABI.type !== 'function') {
       return
     }
     // @todo getData cannot be used with overloaded functions
-    $instance.append(this.getCallButton({
+    instance.appendChild(this.getCallButton({
       funABI: funABI,
       address: address,
-      contractAbi: abi,
+      contractAbi: contractABI,
       contractName: contractName
     }))
   })
 
-  return $instance.get(0)
+  return instance
 }
 
 // TODO this is used by renderInstance when a new instance is displayed.
@@ -393,7 +389,7 @@ UniversalDApp.prototype.getCallButton = function (args) {
         logMsg = `call to ${args.contractName}.${(args.funABI.name) ? args.funABI.name : '(fallback)'}`
       }
     }
-    txFormat.buildData(args.contractAbi, self.contracts, false, args.funABI, inputField.value, self, (error, data) => {
+    txFormat.buildData(args.contractName, args.contractAbi, self.contracts, false, args.funABI, inputField.value, self, (error, data) => {
       if (!error) {
         if (isUserAction) {
           if (!args.funABI.constant) {
@@ -444,7 +440,6 @@ UniversalDApp.prototype.getCallButton = function (args) {
   if (lookupOnly) {
     contractProperty.classList.add(css.constant)
     button.setAttribute('title', (title + ' - call'))
-    call(false)
   }
 
   if (args.funABI.inputs && args.funABI.inputs.length > 0) {
@@ -467,103 +462,99 @@ UniversalDApp.prototype.pendingTransactions = function () {
   return this.txRunner.pendingTxs
 }
 
+function execute (pipeline, env, callback) {
+  function next (err, env) {
+    if (err) return callback(err)
+    var step = pipeline.shift()
+    if (step) step(env, next)
+    else callback(null, env.result)
+  }
+  next(null, env)
+}
+
 UniversalDApp.prototype.runTx = function (args, cb) {
   var self = this
-  var tx = {
-    to: args.to,
-    data: args.data,
-    useCall: args.useCall
+  var tx = { to: args.to, data: args.data.dataHex, useCall: args.useCall, from: args.from, value: args.value }
+  var payLoad = { funAbi: args.data.funAbi, funArgs: args.data.funArgs, contractBytecode: args.data.contractBytecode, contractName: args.data.contractName } // contains decoded parameters
+  var pipeline = [queryGasLimit]
+  if (!args.value) {
+    pipeline.push(queryValue)
   }
-  async.waterfall([
-    // query gas limit
-    function (callback) {
-      tx.gasLimit = 3000000
+  if (!args.from) {
+    pipeline.push(queryAddress)
+  }
+  pipeline.push(runTransaction)
+  var env = { self, tx, payLoad }
+  execute(pipeline, env, cb)
+}
 
-      if (self.transactionContextAPI.getGasLimit) {
-        self.transactionContextAPI.getGasLimit(function (err, ret) {
-          if (err) {
-            return callback(err)
-          }
+function queryGasLimit (env, next) {
+  var { self, tx } = env
+  tx.gasLimit = 3000000
+  if (self.transactionContextAPI.getGasLimit) {
+    self.transactionContextAPI.getGasLimit(function (err, ret) {
+      if (err) return next(err)
+      tx.gasLimit = ret
+      next(null, env)
+    })
+  } else next(null, env)
+}
 
-          tx.gasLimit = ret
-          callback()
-        })
-      } else {
-        callback()
+function queryValue (env, next) {
+  var { self, tx } = env
+  tx.value = 0
+  if (tx.useCall) return next(null, env)
+  if (self.transactionContextAPI.getValue) {
+    self.transactionContextAPI.getValue(function (err, ret) {
+      if (err) return next(err)
+      tx.value = ret
+      next(null, env)
+    })
+  } else next(null, env)
+}
+
+function queryAddress (env, next) {
+  var { self, tx } = env
+  if (self.transactionContextAPI.getAddress) {
+    self.transactionContextAPI.getAddress(function (err, ret) {
+      if (err) return next(err)
+      tx.from = ret
+      next(null, env)
+    })
+  } else {
+    self.getAccounts(function (err, ret) {
+      if (err) return next(err)
+      if (ret.length === 0) return next('No accounts available')
+      if (executionContext.isVM() && !self.accounts[ret[0]]) {
+        return next('Invalid account selected')
       }
-    },
-    // query value
-    function (callback) {
-      tx.value = 0
-      if (tx.useCall) return callback()
-      if (self.transactionContextAPI.getValue) {
-        self.transactionContextAPI.getValue(function (err, ret) {
-          if (err) {
-            return callback(err)
-          }
+      tx.from = ret[0]
+      next(null, env)
+    })
+  }
+}
 
-          tx.value = ret
-          callback()
-        })
-      } else {
-        callback()
-      }
-    },
-    // query address
-    function (callback) {
-      if (self.transactionContextAPI.getAddress) {
-        self.transactionContextAPI.getAddress(function (err, ret) {
-          if (err) {
-            return callback(err)
-          }
-
-          tx.from = ret
-
-          callback()
-        })
-      } else {
-        self.getAccounts(function (err, ret) {
-          if (err) {
-            return callback(err)
-          }
-
-          if (ret.length === 0) {
-            return callback('No accounts available')
-          }
-
-          if (executionContext.isVM() && !self.accounts[ret[0]]) {
-            return callback('Invalid account selected')
-          }
-
-          tx.from = ret[0]
-
-          callback()
-        })
-      }
-    },
-    // run transaction
-    function (callback) {
-      self.txRunner.rawRun(tx, function (error, result) {
-        if (!args.useCall) {
-          self.event.trigger('transactionExecuted', [error, args.from, args.to, args.data, false, result])
-        } else {
-          self.event.trigger('callExecuted', [error, args.from, args.to, args.data, true, result])
-        }
-        if (error) {
-          if (typeof (error) !== 'string') {
-            if (error.message) {
-              error = error.message
-            } else {
-              try {
-                error = 'error: ' + JSON.stringify(error)
-              } catch (e) {}
-            }
-          }
-        }
-        callback(error, result)
-      })
+function runTransaction (env, next) {
+  var { self, tx, payLoad } = env
+  var timestamp = Date.now()
+  self.event.trigger('initiatingTransaction', [timestamp, tx, payLoad])
+  self.txRunner.rawRun(tx, function (error, result) {
+    if (!tx.useCall) {
+      self.event.trigger('transactionExecuted', [error, tx.from, tx.to, tx.data, false, result, timestamp, payLoad])
+    } else {
+      self.event.trigger('callExecuted', [error, tx.from, tx.to, tx.data, true, result, timestamp, payLoad])
     }
-  ], cb)
+    if (error) {
+      if (typeof (error) !== 'string') {
+        if (error.message) error = error.message
+        else {
+          try { error = 'error: ' + JSON.stringify(error) } catch (e) {}
+        }
+      }
+    }
+    env.result = result
+    next(error, env)
+  })
 }
 
 module.exports = UniversalDApp

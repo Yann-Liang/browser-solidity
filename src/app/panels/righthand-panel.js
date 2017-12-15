@@ -1,5 +1,6 @@
 var yo = require('yo-yo')
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 var tabbedMenu = require('../tabs/tabbed-menu')
 var compileTab = require('../tabs/compile-tab')
 var runTab = require('../tabs/run-tab')
@@ -10,8 +11,7 @@ var supportTab = require('../tabs/support-tab')
 
 // -------------- styling ----------------------
 var csjs = require('csjs-inject')
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -42,8 +42,12 @@ var css = csjs`
   #optionViews .hide {
     display: none;
   }
+  a {
+    color: ${styles.rightPanel.text_link};
+  }
   .menu {
     display: flex;
+    background-color: ${styles.rightPanel.BackgroundColor_Pre};
   }
   .options {
     float: left;
@@ -63,10 +67,13 @@ var css = csjs`
   .opts_li {
     display: block;
     font-weight: bold;
+    color: ${styles.rightPanel.text_Teriary};
+  }
+  .opts_li.active {
     color: ${styles.rightPanel.text_Primary};
   }
   .opts_li:hover {
-    color: ${styles.rightPanel.text_Secondary};
+    color: ${styles.rightPanel.icon_HoverColor_TogglePanel};
   }
   .dragbar             {
     position           : absolute;
@@ -131,7 +138,6 @@ function RighthandPanel (appAPI, events, opts) {
       ${self._view.dragbar}
       <div id="header" class=${css.header}>
         <div class=${css.menu}>
-          <img class=${css.solIcon} title="Solidity realtime compiler and runtime" src="assets/img/remix_logo_512x512.svg" alt="Solidity realtime compiler and runtime">
           ${options}
         </div>
         ${optionViews}

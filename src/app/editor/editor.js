@@ -1,16 +1,29 @@
 'use strict'
-
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 var yo = require('yo-yo')
 var csjs = require('csjs-inject')
 var ace = require('brace')
+
+require('brace/theme/tomorrow_night_blue')
+
 var Range = ace.acequire('ace/range').Range
 require('brace/ext/language_tools')
+require('brace/ext/searchbox')
 var langTools = ace.acequire('ace/ext/language_tools')
 require('./mode-solidity.js')
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
+
+function setTheme (cb) {
+  if (styles.appProperties.aceTheme) {
+    cb('brace/theme/', styles.appProperties.aceTheme)
+  }
+}
+
+setTheme((path, theme) => {
+  require('brace/theme/tomorrow_night_blue')
+})
 
 var css = csjs`
   .ace-editor {
@@ -54,6 +67,10 @@ function Editor (opts = {}) {
   var self = this
   var el = yo`<div id="input"></div>`
   var editor = ace.edit(el)
+  if (styles.appProperties.aceTheme) {
+    editor.setTheme('ace/theme/' + styles.appProperties.aceTheme)
+  }
+
   ace.acequire('ace/ext/language_tools')
   editor.setOptions({
     enableBasicAutocompletion: true,
@@ -226,6 +243,8 @@ function Editor (opts = {}) {
     editor.gotoLine(line + 1, col - 1, true)
   }
 
+  this.find = (string) => editor.find(string)
+
   // Do setup on initialisation here
   editor.on('changeSession', function () {
     event.trigger('sessionSwitched', [])
@@ -237,7 +256,6 @@ function Editor (opts = {}) {
 
   // Unmap ctrl-t & ctrl-f
   editor.commands.bindKeys({ 'ctrl-t': null })
-  editor.commands.bindKeys({ 'ctrl-f': null })
 
   editor.resize(true)
 }

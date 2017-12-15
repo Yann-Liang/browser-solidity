@@ -2,7 +2,7 @@
  * @Author: liangyanxiang
  * @Date: 2017-10-19 16:34:44
  * @Last Modified by: liangyanxiang
- * @Last Modified time: 2017-10-19 16:36:05
+ * @Last Modified time: 2017-12-15 09:58:35
  * 编辑区顶部的提示
  * 用于提示代码当前上下文
  */
@@ -10,10 +10,10 @@
 'use strict'
 var yo = require('yo-yo')
 var csjs = require('csjs-inject')
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var remixLib = require('remix-lib')
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
-var SourceMappingDecoder = remix.util.SourceMappingDecoder
+var SourceMappingDecoder = remixLib.SourceMappingDecoder
 
 var css = csjs`
   .contextview            {
@@ -38,18 +38,18 @@ var css = csjs`
   }
   .name                   {
     font-weight       : bold;
-    margin-right      : 15px;
   }
-  .jumpto                 {
+  .jump                   {
     cursor            : pointer;
-    margin-right      : 5px;
+    margin            : 0 5px;
     color             : ${styles.editor.icon_Color_Editor};
   }
-  jumpto:hover            {
+  .jump:hover              {
     color             : ${styles.editor.icon_HoverColor_Editor};
   }
   .referencesnb           {
     float             : right;
+    margin-left       : 15px;
   }
 `
 
@@ -68,6 +68,7 @@ class ContextView {
     this._nodes
     this._current
     this.sourceMappingDecoder = new SourceMappingDecoder()
+    this.previousElement = null
     event.contextualListener.register('contextChanged', nodes => {
       this._nodes = nodes
       this.update()
@@ -107,7 +108,7 @@ class ContextView {
   }
 
   _renderTarget () {
-    this._current = null
+    var previous = this._current
     if (this._nodes && this._nodes.length) {
       var last = this._nodes[this._nodes.length - 1]
       if (isDefinition(last)) {
@@ -116,18 +117,40 @@ class ContextView {
         var target = this._api.contextualListener.declarationOf(last)
         if (target) {
           this._current = target
+        } else {
+          this._current = null
         }
       }
     }
-    return this._render(this._current)
+    if (!this._current || !previous || previous.id !== this._current.id) {
+      this.previousElement = this._render(this._current, last)
+    }
+    return this.previousElement
   }
 
-  _render (node) {
+  _render (node, nodeAtCursorPosition) {
     if (!node) return yo`<div></div>`
     var self = this
     var references = this._api.contextualListener.referencesOf(node)
-    var type = node.attributes.type ? node.attributes.type : node.name
+    var type = (node.attributes && node.attributes.type) ? node.attributes.type : node.name
     references = `${references ? references.length : '0'} reference(s)`
+
+    var ref = 0
+    var nodes = self._api.contextualListener.getActiveHighlights()
+    for (var k in nodes) {
+      if (nodeAtCursorPosition.id === nodes[k].nodeId) {
+        ref = k
+        break
+      }
+    }
+
+    // JUMP BETWEEN REFERENCES
+    function jump (e) {
+      e.target.dataset.action === 'next' ? ref++ : ref--
+      if (ref < 0) ref = nodes.length - 1
+      if (ref >= nodes.length) ref = 0
+      self._api.jumpTo(nodes[ref].position)
+    }
 
     function jumpTo () {
       if (node && node.src) {
@@ -138,11 +161,13 @@ class ContextView {
       }
     }
 
-    return yo`<div class=${css.line}>范德萨发撒旦法三分
-      <div title=${type} class=${css.type} >发呆是生生世世生生世世生生世世生生世世生生世世${type}</div>
-      <div title=${node.attributes.name} class=${css.name} >${node.attributes.name}</div>
-      <i title='Go to Definition' class="fa fa-share ${css.jumpto}" aria-hidden="true" onclick=${jumpTo}></i>
+    return yo`<div class=${css.line}>
+      <div title=${type} class=${css.type}>${type}</div>
+      <div title=${node.attributes.name} class=${css.name}>${node.attributes.name}</div>
+      <i class="fa fa-share ${css.jump}" aria-hidden="true" onclick=${jumpTo}></i>
       <span class=${css.referencesnb}>${references}</span>
+      <i data-action='previous' class="fa fa-chevron-up ${css.jump}" aria-hidden="true" onclick=${jump}></i>
+      <i data-action='next' class="fa fa-chevron-down ${css.jump}" aria-hidden="true" onclick=${jump}></i>
     </div>`
   }
 }

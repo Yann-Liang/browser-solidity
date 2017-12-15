@@ -1,9 +1,9 @@
 var yo = require('yo-yo')
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 // -------------- styling ----------------------
 var csjs = require('csjs-inject')
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -13,7 +13,7 @@ var css = csjs`
     position          : relative;
     display           : flex;
     flex-direction    : column;
-    margin-right      : 3px;
+    margin-right      : 10px;
   }
   .selectbox          {
     display           : flex;

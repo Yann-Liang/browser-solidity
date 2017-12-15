@@ -4,15 +4,15 @@ var javascriptserialize = require('javascript-serialize')
 var jsbeautify = require('js-beautify')
 var type = require('component-type')
 var vm = require('vm')
-var EventManager = require('ethereum-remix').lib.EventManager
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
 var Web3 = require('web3')
 
 var executionContext = require('../../execution-context')
 var Dropdown = require('../ui/dropdown')
 // -------------- styling ----------------------
 var csjs = require('csjs-inject')
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -27,7 +27,6 @@ var css = csjs`
     min-height        : 1.7em;
     overflow          : hidden;
   }
-
   .bar                {
     display           : flex;
     min-height        : 3em;
@@ -43,28 +42,35 @@ var css = csjs`
     width             : 100%;
     padding           : 5px;
   }
-  .toggleTerminal           {
-    margin-left       : auto;
+  .clear           {
+    margin-left       : 10px;
+    margin-right      : 10px; 
     width             : 10px;
     cursor            : pointer;
     color             : ${styles.terminal.icon_Color_TogglePanel};
-    font-size         : 14px;
-    font-weight       : bold;
-  }
-  .toggleTerminal:hover              {
-    color             : ${styles.terminal.icon_HoverColor_TogglePanel};
-  }
-  .clear              {
-    margin-right      : 5px;
-    cursor            : pointer;
-    color             : ${styles.terminal.icon_Color_Menu};
   }
   .clear:hover              {
     color             : ${styles.terminal.icon_HoverColor_Menu};
   }
-
-  .terminal           {
+  .toggleTerminal              {
+    margin-right      : 10px;
+    font-size         : 14px;
+    font-weight       : bold;
+    cursor            : pointer;
+    color             : ${styles.terminal.icon_Color_Menu};
+  }
+  .toggleTerminal:hover              {
+    color             : ${styles.terminal.icon_HoverColor_TogglePanel};
+  }
+  .terminal_container {
     background-color  : ${styles.terminal.backgroundColor_Terminal};
+    display           : flex;
+    flex-direction    : column;
+    height            : 100%;
+    overflow-y        : auto;
+    font-family       : monospace;
+  }
+  .terminal_bg     {
     display           : flex;
     flex-direction    : column;
     height            : 100%;
@@ -73,19 +79,21 @@ var css = csjs`
     padding-bottom    : 3px;
     overflow-y        : auto;
     font-family       : monospace;
-  }
-  .terminal::after {
-    content           : "";
-    background-image  : url(assets/img/remix_logo_512x512.svg);
+    background-image  : ${styles.terminal.backgroundImage_Terminal};
     opacity           : 0.1;
     top               : 15%;
     left              : 33%;
     bottom            : 0;
     right             : 0;
     position          : absolute;
-    z-index           : -1;
     background-repeat : no-repeat;
     background-size   : 45%;
+  }
+  .terminal    {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
   .journal            {
     margin-top        : auto;
@@ -101,24 +109,51 @@ var css = csjs`
   .cli                {
     line-height       : 1.7em;
     font-family       : monospace;
+    background-color  : ${styles.terminal.backgroundColor_TerminalCLI};
+    padding           : .4em;
+    color             : ${styles.appProperties.mainText_Color};
+    border-top        : solid 2px ${styles.terminal.bar_Ghost};
   }
   .prompt             {
     margin-right      : 0.5em;
     font-family       : monospace;
     font-weight       : bold;
     font-size         : large;
-    color             : ${styles.colors.black};
+    color             : ${styles.appProperties.supportText_OppositeColor};
   }
   .input              {
     word-break        : break-all;
     outline           : none;
     font-family       : monospace;
   }
+  .search {
+    display: flex;
+    align-items: center;
+    margin-right: 10px;
+  }
   .filter             {
     ${styles.terminal.input_Search_MenuBar}
-    width             : 150px;
+    width                       : 200px;
+    padding-right               : 0px;
+    margin-right                : 0px;
+    border-top-left-radius      : 0px;
+    border-bottom-left-radius   : 0px;
   }
-
+  .searchIcon {
+    background-color            : ${styles.colors.veryLightGrey};
+    color                       : ${styles.terminal.icon_Color_Menu};
+    height                      : 25px;
+    width                       : 25px;
+    border-top-left-radius      : 3px;
+    border-bottom-left-radius   : 3px;
+    display                     : flex;
+    align-items                 : center;
+    justify-content             : center;
+  }
+  .listen {
+    min-width         : 120px;
+    display           : flex;
+  }
   .dragbarHorizontal  {
     position          : absolute;
     top               : 0;
@@ -155,7 +190,8 @@ class Terminal {
     self.data = {
       lineLength: opts.lineLength || 80,
       session: [],
-      activeFilters: { commands: {}, input: '' }
+      activeFilters: { commands: {}, input: '' },
+      filterFns: {}
     }
     self._view = { el: null, bar: null, input: null, term: null, journal: null, cli: null }
     self._components = {}
@@ -200,6 +236,13 @@ class Terminal {
         else scopedCommands.log(output)
       })
     }, { activate: true })
+    function basicFilter (value, query) { try { return value.indexOf(query) !== -1 } catch (e) { return false } }
+
+    self.registerFilter('log', basicFilter)
+    self.registerFilter('info', basicFilter)
+    self.registerFilter('error', basicFilter)
+    self.registerFilter('script', basicFilter)
+
     self._jsSandboxContext = {}
     self._jsSandbox = vm.createContext(self._jsSandboxContext)
     if (opts.shell) self._shell = opts.shell
@@ -226,13 +269,13 @@ class Terminal {
       <div class=${css.bar}>
         ${self._view.dragbar}
         <div class=${css.menu}>
+          ${self._view.icon}
           <div class=${css.clear} onclick=${clear}>
-            <i class="fa fa-ban" aria-hidden="true" onmouseenter=${hover} onmouseleave=${hover}></i>
+          <i class="fa fa-ban" aria-hidden="true" onmouseenter=${hover} onmouseleave=${hover}></i>
           </div>
           ${self._view.dropdown}
-          <input type="text" class=${css.filter} onkeyup=${filter}>
-          <input onchange=${listenOnNetwork} type="checkbox"><label title="If checked Remix will listen on all transactions mined in the current environment and not only transactions created from the GUI">Listen on network</label>
-          ${self._view.icon}
+          <div class=${css.search}><i class="fa fa-search ${css.searchIcon}" aria-hidden="true"></i><input type="text" class=${css.filter} onkeydown=${filter}  placeholder="Search transactions"></div>
+          <div class=${css.listen}><input onchange=${listenOnNetwork} type="checkbox"><label title="If checked Remix will listen on all transactions mined in the current environment and not only transactions created from the GUI">Listen on network</label></div>
         </div>
       </div>
     `
@@ -241,9 +284,13 @@ class Terminal {
     }
 
     self._view.term = yo`
-      <div class=${css.terminal} onscroll=${throttle(reattach, 10)} onclick=${focusinput}>
-        ${self._view.journal}
-        ${self._view.cli}
+      <div class=${css.terminal_container} onscroll=${throttle(reattach, 10)} onclick=${focusinput}>
+        <div class=${css.terminal_bg}>
+        </div>
+        <div class=${css.terminal}>
+            ${self._view.journal}
+            ${self._view.cli}
+        </div>
       </div>
     `
     self._view.el = yo`
@@ -295,6 +342,11 @@ class Terminal {
     var background = yo`<div class="${css2.overlay} ${css2.background}"></div>`
     var placeholder = yo`<div class=${css2.anchor}>${background}${text}</div>`
     var inserted = false
+
+    window.addEventListener('resize', function (event) {
+      self.event.trigger('resize', [])
+      self.event.trigger('resize', [])
+    })
 
     function focusinput (event) {
       if (self._view.journal.offsetHeight - (self._view.term.scrollTop + self._view.term.offsetHeight) < 50) {
@@ -375,9 +427,14 @@ class Terminal {
         self.event.trigger('resize', [])
       }
     }
+    var filtertimeout = null
     function filter (event) {
-      var input = event.currentTarget
-      self.updateJournal({ type: 'search', value: input.value })
+      if (filtertimeout) {
+        clearTimeout(filtertimeout)
+      }
+      filtertimeout = setTimeout(() => {
+        self.updateJournal({ type: 'search', value: document.querySelector('.' + event.target.className).value })
+      }, 500)
     }
     function clear (event) {
       refocus()
@@ -513,8 +570,8 @@ class Terminal {
         var items = self._JOURNAL
         for (var gidx = 0, len = items.length; gidx < len; gidx++) {
           var item = items[gidx]
-          if (item) {
-            var show = query.length ? match(item.args, query) : true
+          if (item && self.data.filterFns[item.cmd]) {
+            var show = query.length ? self.data.filterFns[item.cmd](item.args, query) : true
             item.hide = !show
           }
         }
@@ -528,14 +585,6 @@ class Terminal {
       self._view.journal.innerHTML = ''
       self._view.journal.appendChild(df)
     })
-  }
-  _shouldAdd (item) {
-    var self = this
-    if (self.data.activeFilters.commands[item.root.cmd]) {
-      var query = self.data.activeFilters.input
-      var args = item.args
-      return query.length ? match(args, query) : true
-    }
   }
   _appendItem (item) {
     var self = this
@@ -584,6 +633,9 @@ class Terminal {
     })
     return scopedCommands
   }
+  registerFilter (commandName, filterFn) {
+    this.data.filterFns[commandName] = filterFn
+  }
   registerCommand (name, command, opts) {
     var self = this
     name = String(name)
@@ -612,7 +664,7 @@ class Terminal {
         item.idx = self._INDEX.commands[cmd].push(item) - 1
         item.step = steps.push(item) - 1
         item.args = params
-        if (self._shouldAdd(item)) self._appendItem(item)
+        self._appendItem(item)
       }
       var scopedCommands = self._scopeCommands(append)
       command(args, scopedCommands, el => append(null, args, blockify(el)))
@@ -624,6 +676,9 @@ class Terminal {
     self.commands[name].toString = _ => { return help }
     self.commands[name].help = help
     self.data.activeFilters.commands[name] = opts && opts.activate
+    if (opts.filterFn) {
+      self.registerFilter(name, opts.filterFn)
+    }
     return self.commands[name]
   }
   _shell (script, scopedCommands, done) { // default shell
@@ -649,30 +704,6 @@ function domTerminalFeatures (self, scopedCommands) {
       error: function () { scopedCommands.error.apply(scopedCommands, arguments) }
     }
   }
-}
-
-function findDeep (object, fn, found = { break: false, value: undefined }) {
-  if (typeof object !== 'object' || object === null) return
-  for (var i in object) {
-    if (found.break) break
-    var el = object[i]
-    if (el && el.innerText !== undefined && el.innerText !== null) el = el.innerText
-    if (!fn(el, i, object)) findDeep(el, fn, found)
-    else if (found.break = true) return found.value = el // eslint-disable-line
-  }
-  return found.value
-}
-
-function match (args, query) {
-  query = query.trim()
-  var isMatch = !!findDeep(args, function check (value, key) {
-    if (value === undefined || value === null) return false
-    if (typeof value === 'function') return false
-    if (typeof value === 'object') return false
-    var contains = String(value).indexOf(query.trim()) !== -1
-    return contains
-  })
-  return isMatch
 }
 
 function blockify (el) { return yo`<div class=${css.block}>${el}</div>` }

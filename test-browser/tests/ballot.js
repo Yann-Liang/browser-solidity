@@ -5,7 +5,7 @@ var init = require('../helpers/init')
 var sauce = require('./sauce')
 
 var sources = [
-  {'browser/Untitled.sol': examples.ballot.content}
+  {'browser/Untitled.sol': {content: examples.ballot.content}}
 ]
 
 module.exports = {
@@ -23,29 +23,36 @@ module.exports = {
 
 function runTests (browser, testData) {
   browser.testFunction = contractHelper.testFunction
+  browser.clickFunction = contractHelper.clickFunction
+  browser.modalFooterOKClick = contractHelper.modalFooterOKClick
+  browser.setEditorValue = contractHelper.setEditorValue
   browser
     .waitForElementVisible('.newFile', 10000)
     .click('.compileView')
-  contractHelper.testContracts(browser, 'Untitled.sol', sources[0]['browser/Untitled.sol'], ['browser/Untitled.sol:Ballot'], function () {
-    browser
-      .click('.runView')
-      .setValue('input[placeholder="uint8 _numProposals"]', '1', () => {})
+  .perform((client, done) => {
+    contractHelper.testContracts(browser, 'Untitled.sol', sources[0]['browser/Untitled.sol'], ['Ballot'], function () {
+      done()
+    })
+  }).click('.runView')
+      .setValue('input[placeholder="uint8 _numProposals"]', '1')
       .click('#runTabView div[class^="create"]')
-      .testFunction('delegate - transact (not payable)', '0xd3cd54e2f76f3993078ecf9e1b54a148def4520afc141a182293b3610bddf10f',
-        '[vm] from:0xca3...a733c, to:browser/Untitled.sol:Ballot.delegate(address) 0x692...77b3a, value:0 wei, data:0x5c1...4d2db, 0 logs, hash:0xd3c...df10f',
+      .testFunction('delegate - transact (not payable)', '0x0571a2439ea58bd349dd130afb8aff62a33af14c06de0dbc3928519bdf13ce2e',
+        '[vm] from:0xca3...a733c, to:Ballot.delegate(address) 0x692...77b3a, value:0 wei, data:0x5c1...4d2db, 0 logs, hash:0x057...3ce2e',
         {types: 'address to', values: '"0x4b0897b0513fdc7c541b6d9d7e929c4e5364d2db"'}, null, null)
-      .click('span#tx0xd3cd54e2f76f3993078ecf9e1b54a148def4520afc141a182293b3610bddf10f button[class^="debug"]')
+      .pause(500)
+      .click('span#tx0x0571a2439ea58bd349dd130afb8aff62a33af14c06de0dbc3928519bdf13ce2e button[class^="debug"]')
       .pause(1000)
       .click('#jumppreviousbreakpoint')
       .click('#stepdetail .title')
       .click('#asmcodes .title')
       .pause(500)
       .perform(function (client, done) {
+        console.log('goToVMtraceStep')
         contractHelper.goToVMtraceStep(browser, 39, () => {
           done()
         })
       })
-      .pause(2000)
+      .pause(1000)
       .perform(function (client, done) {
         contractHelper.checkDebug(browser, 'soliditystate', stateCheck, () => {
           done()
@@ -54,10 +61,28 @@ function runTests (browser, testData) {
       .perform(function (client, done) {
         contractHelper.checkDebug(browser, 'soliditylocals', localsCheck, () => {
           done()
-          browser.end()
         })
       })
-  })
+      .click('.runView')
+      .click('div[class^="udappClose"]')
+      .perform((client, done) => {
+        console.log('ballot.abi')
+        contractHelper.addFile(browser, 'ballot.abi', { content: ballotABI }, () => {
+          done()
+        })
+      })
+      .perform((client, done) => {
+        console.log('addInstance 0x692a70d2e424a56d2c6c27aa97d1a86395877b3a')
+        contractHelper.addInstance(browser, '0x692a70d2e424a56d2c6c27aa97d1a86395877b3a', () => {
+          done()
+        })
+      })
+      .perform((client, done) => {
+        console.log('delegate - transact (not payable)')
+        browser.testFunction('delegate - transact (not payable)', '0xd3cd54e2f76f3993078ecf9e1b54a148def4520afc141a182293b3610bddf10f',
+              '[vm] from:0xca3...a733c, to:Ballot.delegate(address) 0x692...77b3a, value:0 wei, data:0x5c1...4d2db, 0 logs, hash:0xd3c...df10f',
+              {types: 'address to', values: '"0x4b0897b0513fdc7c541b6d9d7e929c4e5364d2db"'}, null, null, () => { done() })
+      }).end()
 }
 
 var localsCheck = {
@@ -117,3 +142,5 @@ var stateCheck = {
     'constant': false
   }
 }
+
+var ballotABI = '[{"constant":false,"inputs":[{"name":"to","type":"address"}],"name":"delegate","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"winningProposal","outputs":[{"name":"_winningProposal","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"toVoter","type":"address"}],"name":"giveRightToVote","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"toProposal","type":"uint8"}],"name":"vote","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"inputs":[{"name":"_numProposals","type":"uint8"}],"payable":false,"stateMutability":"nonpayable","type":"constructor"}]'

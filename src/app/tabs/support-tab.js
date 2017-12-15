@@ -2,8 +2,8 @@ var yo = require('yo-yo')
 
 // -------------- styling ----------------------
 var csjs = require('csjs-inject')
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var remixLib = require('remix-lib')
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var css = csjs`
@@ -50,6 +50,7 @@ var css = csjs`
     height: 100%;
     transform: scale(0.9);
     padding: 0;
+    border: none;
   }
   .infoBox {
     ${styles.rightPanel.supportTab.box_SupportInfo}

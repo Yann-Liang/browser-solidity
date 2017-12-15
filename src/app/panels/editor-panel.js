@@ -1,8 +1,8 @@
 var csjs = require('csjs-inject')
 var yo = require('yo-yo')
-var EventManager = require('ethereum-remix').lib.EventManager
-var remix = require('ethereum-remix')
-var styleGuide = remix.ui.styleGuide
+var remixLib = require('remix-lib')
+var EventManager = remixLib.EventManager
+var styleGuide = remixLib.ui.styleGuide
 var styles = styleGuide()
 
 var Terminal = require('./terminal')
@@ -20,7 +20,7 @@ var cssTabs = yo`
       display: table-cell;
       text-align: center;
       vertical-align: middle;
-      color: ${styles.editor.text_Secondary};
+      color: ${styles.editor.text_Teriary};
     }
     #files .file.active {
       color: ${styles.editor.text_Primary};
@@ -46,6 +46,7 @@ var cssTabs = yo`
     }
     #files .file.active .remove {
       display: inline-block;
+      color: ${styles.editor.text_Primary};
     }
   </style>
 `
@@ -269,6 +270,7 @@ class EditorPanel {
     self._view.terminal = self._components.terminal.render()
     self._view.content = yo`
       <div class=${css.content}>
+        ${self._renderTabsbar()}
         <div class=${css.contextviewcontainer}>
           ${self._api.contextview.render()}
         </div>
@@ -278,7 +280,6 @@ class EditorPanel {
     `
     self._view.el = yo`
       <div class=${css.editorpanel}>
-        ${self._renderTabsbar()}
         ${self._view.content}
       </div>
     `
