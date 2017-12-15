@@ -286,9 +286,13 @@ UniversalDApp.prototype.getBalance = function (address, cb) {
 // this will render an instance: contract name, contract address, and all the public functions
 // basically this has to be called for the "atAddress" (line 393) and when a contract creation succeed
 // this returns a DOM element
+// TODO这个函数被命名为“appendChild”。
+// 这将呈现一个实例:合同名称、合同地址以及所有的公共职能
+// 基本上这需要“atAddress”(第393行)和合同创建成功
+// 这返回一个DOM元素
 UniversalDApp.prototype.renderInstance = function (contract, address, contractName) {
   var self = this
-
+  debugger;
   function remove () { $instance.remove() }
   var $instance = $(`<div class="instance ${css.instance}"/>`)
   var context = executionContext.isVM() ? 'memory' : 'blockchain'
@@ -308,7 +312,8 @@ UniversalDApp.prototype.renderInstance = function (contract, address, contractNa
     $instance.toggleClass(`${css.hidesub}`)
   }
 
-  function copyToClipboard (event) {
+  function copyToClipboard(event) {
+    debugger;
     event.stopPropagation()
     copy(address)
   }
@@ -377,8 +382,9 @@ UniversalDApp.prototype.getCallButton = function (args) {
   function clickButton () {
     call(true)
   }
-
-  function call (isUserAction) {
+  // call
+  function call(isUserAction) {
+    debugger;
     var logMsg
     if (isUserAction) {
       if (!args.funABI.constant) {

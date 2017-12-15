@@ -88,6 +88,7 @@ class FileManager {
   }
 
   // Display files that have already been selected
+  // 显示已经被选中的文件
   refreshTabs (newfile) {
     var self = this
     if (newfile) {

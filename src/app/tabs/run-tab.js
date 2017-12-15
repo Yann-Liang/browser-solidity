@@ -293,8 +293,10 @@ function contractDropdown (appAPI, appEvents, instanceContainer) {
   selectContractNames.addEventListener('change', setInputParamsPlaceHolder)
 
   // ADD BUTTONS AT ADDRESS AND CREATE
-  function createInstance () {
+  function createInstance () {debugger;
+    // 获取选择的文件名
     var contractNames = document.querySelector(`.${css.contractNames.classNames[0]}`)
+    // 获取
     var contracts = appAPI.getContracts()
     var contractName = contractNames.children[contractNames.selectedIndex].innerHTML
     var contract = appAPI.getContracts()[contractName]
@@ -304,7 +306,9 @@ function contractDropdown (appAPI, appEvents, instanceContainer) {
       return
     }
 
+    // 获取对应的abi
     var constructor = txHelper.getConstructorInterface(contract.interface)
+    // Create按钮右边输入框的值
     var args = createButtonInput.value
     txFormat.buildData(contract, contracts, true, constructor, args, appAPI.udapp(), (error, data) => {
       if (!error) {
@@ -321,6 +325,7 @@ function contractDropdown (appAPI, appEvents, instanceContainer) {
             }
             noInstancesText.style.display = 'none'
             var address = isVM ? txResult.result.createdAddress : txResult.result.contractAddress
+            debugger;
             instanceContainer.appendChild(appAPI.udapp().renderInstance(contract, address, selectContractNames.value))
           } else {
             appAPI.logMessage(`creation of ${contractName} errored: ` + error)
