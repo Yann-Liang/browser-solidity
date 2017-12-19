@@ -46,6 +46,7 @@ function Compiler (handleImportCall) {
   })
 
   var internalCompile = function (files, target, missingInputs) {
+    console.log('internalCompile',files, target, missingInputs)
     gatherImports(files, target, missingInputs, function (error, input) {
       // input:{ 'sources': files, 'target': target }
       if (error) {
@@ -56,7 +57,10 @@ function Compiler (handleImportCall) {
       }
     })
   }
-
+  /*
+   * files当前的文件内容
+   * target当前的文件名
+   */
   var compile = function (files, target) {
     console.info('编译触发2--定义')
     self.event.trigger('compilationStarted', [])
@@ -91,7 +95,8 @@ function Compiler (handleImportCall) {
         }
 
         var result
-        try {// optimize setting面板中的Enable Optimization  默认不勾选为false
+        try {
+          // optimize setting面板中的Enable Optimization  默认不勾选为false
           var input = compilerInput(source.sources, {optimize: optimize, target: source.target})
           result = compiler.compileStandardWrapper(input, missingInputsCallback)
           result = JSON.parse(result)

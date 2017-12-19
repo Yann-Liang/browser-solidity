@@ -309,8 +309,7 @@ UniversalDApp.prototype.renderInstanceFromABI = function (contractABI, address, 
     $instance.toggleClass(`${css.hidesub}`)
   }
 
-  function copyToClipboard(event) {
-    debugger;
+  function copyToClipboard (event) {
     event.stopPropagation()
     copy(address)
     $(instance).toggleClass(`${css.hidesub}`)
@@ -379,8 +378,7 @@ UniversalDApp.prototype.getCallButton = function (args) {
     call(true)
   }
   // call
-  function call(isUserAction) {
-    debugger;
+  function call (isUserAction) {
     var logMsg
     if (isUserAction) {
       if (!args.funABI.constant) {
